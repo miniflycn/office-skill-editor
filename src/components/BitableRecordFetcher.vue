@@ -15,6 +15,8 @@ const formData = ref<Record<string, string>>({})
 const validationResults = ref<Array<{ name: string; passed: boolean; message: string }>>([])
 const aiAnalysisLoading = ref(false)
 const aiAnalysisResult = ref('')
+const aiReasoningContent = ref('')
+const showReasoning = ref(false)
 
 function extractTextFromArray(arr: any[]): string {
   if (!Array.isArray(arr)) return String(arr || '')
@@ -244,7 +246,11 @@ function extractHardConstraintOptions(rubricsText: string): Array<{ description:
   }))
 }
 
-async function callZhipuAIStream(prompt: string, onChunk: (chunk: string) => void): Promise<void> {
+async function callZhipuAIStream(
+  prompt: string,
+  onChunk: (chunk: string) => void,
+  onReasoningChunk?: (chunk: string) => void
+): Promise<void> {
   const response = await fetch(ZHIPU_API_BASE + 'chat/completions', {
     method: 'POST',
     headers: {
@@ -294,8 +300,13 @@ async function callZhipuAIStream(prompt: string, onChunk: (chunk: string) => voi
         try {
           const parsed = JSON.parse(data)
           const content = parsed.choices?.[0]?.delta?.content
+          const reasoningContent = parsed.choices?.[0]?.delta?.reasoning_content
+          
           if (content) {
             onChunk(content)
+          }
+          if (reasoningContent && onReasoningChunk) {
+            onReasoningChunk(reasoningContent)
           }
         } catch {
         }
@@ -398,12 +409,23 @@ ${constraintsText}
 `
 
     aiAnalysisResult.value = ''
+    aiReasoningContent.value = ''
+    showReasoning.value = true
     
-    await callZhipuAIStream(prompt, (chunk) => {
-      aiAnalysisResult.value += chunk
-    })
+    await callZhipuAIStream(
+      prompt,
+      (chunk) => {
+        aiAnalysisResult.value += chunk
+      },
+      (reasoningChunk) => {
+        aiReasoningContent.value += reasoningChunk
+      }
+    )
+    
+    showReasoning.value = false
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
+    showReasoning.value = false
   } finally {
     aiAnalysisLoading.value = false
   }
@@ -517,7 +539,19 @@ async function fetchBitableRecord() {
             {{ aiAnalysisLoading ? '分析中...' : '调用 AI 分析硬约束' }}
           </button>
 
+          <div v-if="aiReasoningContent" class="ai-reasoning" :class="{ hidden: !showReasoning }">
+            <div class="reasoning-header">
+              <h4>思考过程</h4>
+              <button class="collapse-btn" @click="showReasoning = false">收起</button>
+            </div>
+            <pre>{{ aiReasoningContent }}</pre>
+          </div>
+
           <div v-if="aiAnalysisResult" class="ai-result">
+            <div v-if="aiReasoningContent && !showReasoning" class="show-reasoning-btn">
+              <button class="text-btn" @click="showReasoning = true">显示思考过程</button>
+            </div>
+            <h4>分析结果</h4>
             <pre>{{ aiAnalysisResult }}</pre>
           </div>
 
@@ -780,6 +814,81 @@ button:disabled {
   font-size: 13px;
   line-height: 1.6;
   color: #333;
+}
+
+.ai-result h4,
+.ai-reasoning h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.ai-reasoning {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: #fff9e6;
+  border-radius: 8px;
+  border: 1px solid #f0d78c;
+}
+
+.ai-reasoning.hidden {
+  display: none;
+}
+
+.ai-reasoning pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #856404;
+}
+
+.reasoning-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.reasoning-header h4 {
+  margin: 0;
+}
+
+.collapse-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  background-color: transparent;
+  color: #856404;
+  border: 1px solid #f0d78c;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.collapse-btn:hover {
+  background-color: #f0d78c;
+}
+
+.show-reasoning-btn {
+  margin-bottom: 12px;
+}
+
+.text-btn {
+  padding: 4px 0;
+  font-size: 13px;
+  background-color: transparent;
+  color: #4a9eff;
+  border: none;
+  border-bottom: 1px dashed #4a9eff;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.text-btn:hover {
+  color: #3a8eef;
+  border-bottom-color: #3a8eef;
 }
 
 .ai-loading {
