@@ -244,7 +244,7 @@ function extractHardConstraintOptions(rubricsText: string): Array<{ description:
   }))
 }
 
-async function callZhipuAI(prompt: string): Promise<string> {
+async function callZhipuAIStream(prompt: string, onChunk: (chunk: string) => void): Promise<void> {
   const response = await fetch(ZHIPU_API_BASE + 'chat/completions', {
     method: 'POST',
     headers: {
@@ -259,7 +259,8 @@ async function callZhipuAI(prompt: string): Promise<string> {
           content: prompt
         }
       ],
-      temperature: 0.3
+      temperature: 0.3,
+      stream: true
     })
   })
 
@@ -268,8 +269,39 @@ async function callZhipuAI(prompt: string): Promise<string> {
     throw new Error(`API 调用失败: ${errorText}`)
   }
 
-  const result = await response.json()
-  return result.choices?.[0]?.message?.content || ''
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('无法获取响应流')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6)
+        if (data === '[DONE]') continue
+
+        try {
+          const parsed = JSON.parse(data)
+          const content = parsed.choices?.[0]?.delta?.content
+          if (content) {
+            onChunk(content)
+          }
+        } catch {
+        }
+      }
+    }
+  }
 }
 
 async function analyzeHardConstraints() {
@@ -365,8 +397,11 @@ ${constraintsText}
 [最需要改进的约束和具体建议]
 `
 
-    const analysis = await callZhipuAI(prompt)
-    aiAnalysisResult.value = analysis
+    aiAnalysisResult.value = ''
+    
+    await callZhipuAIStream(prompt, (chunk) => {
+      aiAnalysisResult.value += chunk
+    })
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
