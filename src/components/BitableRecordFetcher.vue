@@ -285,6 +285,11 @@ async function analyzeHardConstraints() {
     return
   }
 
+  const userQueries = formData.value['会触发特定技能的用户 Query']
+  const userQueriesText = Array.isArray(userQueries)
+    ? userQueries.join('\n- ')
+    : userQueries || '无'
+
   aiAnalysisLoading.value = true
   error.value = ''
   aiAnalysisResult.value = ''
@@ -297,10 +302,29 @@ async function analyzeHardConstraints() {
 1分情况: ${opt.onePoint}`
     }).join('\n\n')
 
-    const prompt = `请分析以下硬约束选项的 0分情况 和 1分情况 描述：
+    const prompt = `## 背景信息
 
+【会触发特定技能的用户 Query】（需要被覆盖的要求）：
+${userQueriesText ? '- ' + userQueriesText : '无'}
+
+【硬约束列表】（用于验证是否覆盖上述要求）：
 ${constraintsText}
 
+## 分析任务
+
+### 任务1：验证硬约束是否覆盖用户 Query 要求
+请逐一检查每个"用户 Query"，判断是否有对应的硬约束来验证该要求的满足情况：
+
+对于每个用户 Query，请判断：
+- 是否有硬约束的"0分情况"或"1分情况"提及了该 Query 中提到的关键要求？
+- 如果没有覆盖，请指出哪个用户 Query 要求未被任何硬约束覆盖
+
+请给出：
+1. 覆盖了哪些用户 Query（列出具体 Query 内容和对应的硬约束）
+2. 未覆盖哪些用户 Query（列出具体 Query 内容和原因）
+3. 覆盖率估算（已覆盖/总要求数）
+
+### 任务2：硬约束质量分析
 请按照以下三个维度逐一分析每个约束：
 
 ## 1. MECE 原则（相互独立，完全穷尽）
@@ -326,6 +350,19 @@ ${constraintsText}
 - 是否便于常人判断（符合/不符合）
 - 是否可从最终产物验证（符合/不符合）
 - 具体问题和改进建议
+
+### 输出格式
+
+## 覆盖性分析结果
+[覆盖率估算]
+[覆盖详情]
+[未覆盖详情]
+
+## 硬约束质量分析
+[每个约束的详细分析]
+
+## 改进建议
+[最需要改进的约束和具体建议]
 `
 
     const analysis = await callZhipuAI(prompt)
