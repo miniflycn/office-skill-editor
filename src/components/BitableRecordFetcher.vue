@@ -114,6 +114,9 @@ function validateRubrics() {
             relatedFactValid = false
             wrongFactIssues.push(`${constraintLabel}（第${idx + 1}个）`)
           }
+        } else if (!needFact) {
+          relatedFactValid = false
+          missingSourceIssues.push(`${constraintLabel}（第${idx + 1}个）`)
         }
       })
 
@@ -198,8 +201,9 @@ function validateRubrics() {
 
   if (parsedAdjusted && parsedAdjusted.rubric) {
     const allConstraints = [
-      ...(parsedAdjusted.rubric.硬约束 || []),
-      ...(parsedAdjusted.rubric.软约束 || [])
+      // ...(parsedAdjusted.rubric.硬约束 || []),
+      ...(parsedAdjusted.rubric.软约束 || []),
+      ...(parsedAdjusted.rubric.可选约束 || [])
     ]
 
     let fourPointValid = true
@@ -208,7 +212,7 @@ function validateRubrics() {
     allConstraints.forEach((c: any) => {
       const fourPointAnswer = c['是否需要4分区间']
       if (fourPointAnswer) {
-        if (fourPointAnswer === '否' || fourPointAnswer.trim() === '是') {
+        if (fourPointAnswer.trim() === '否' || fourPointAnswer.trim() === '是') {
           fourPointValid = false
           invalidFourPointCount++
         }
