@@ -15,9 +15,12 @@ const data = ref<any>(null)
 const formData = ref<Record<string, string>>({})
 const validationResults = ref<Array<{ name: string; passed: boolean; message: string }>>([])
 const aiAnalysisLoading = ref(false)
-const aiAnalysisResult = ref('')
-const aiReasoningContent = ref('')
-const showReasoning = ref(false)
+const aiHardConstraintResult = ref('')
+const aiHardConstraintReasoning = ref('')
+const showHardConstraintReasoning = ref(false)
+const aiSoftOptionalResult = ref('')
+const aiSoftOptionalReasoning = ref('')
+const showSoftOptionalReasoning = ref(false)
 const showDiffModal = ref(false)
 const diffResult = ref<Array<Diff.Change>>([])
 const diffOriginalLines = ref(0)
@@ -679,7 +682,7 @@ async function analyzeHardConstraints() {
 
   aiAnalysisLoading.value = true
   error.value = ''
-  aiAnalysisResult.value = ''
+  aiHardConstraintResult.value = ''
 
   try {
     const constraintsText = options.map((opt, idx) => {
@@ -753,24 +756,24 @@ ${constraintsText}
 [最需要改进的约束和具体建议]
 `
 
-    aiAnalysisResult.value = ''
-    aiReasoningContent.value = ''
-    showReasoning.value = true
+    aiHardConstraintResult.value = ''
+    aiHardConstraintReasoning.value = ''
+    showHardConstraintReasoning.value = true
     
     await callZhipuAIStream(
       prompt,
       (chunk) => {
-        aiAnalysisResult.value += chunk
+        aiHardConstraintResult.value += chunk
       },
       (reasoningChunk) => {
-        aiReasoningContent.value += reasoningChunk
+        aiHardConstraintReasoning.value += reasoningChunk
       }
     )
     
-    showReasoning.value = false
+    showHardConstraintReasoning.value = false
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
-    showReasoning.value = false
+    showHardConstraintReasoning.value = false
   } finally {
     aiAnalysisLoading.value = false
   }
@@ -798,8 +801,8 @@ async function analyzeSoftAndOptionalConstraints() {
 
   aiAnalysisLoading.value = true
   error.value = ''
-  aiAnalysisResult.value = ''
-  aiReasoningContent.value = ''
+  aiSoftOptionalResult.value = ''
+  aiSoftOptionalReasoning.value = ''
 
   try {
     const softConstraintsText = softConstraints.map((sc, idx) => {
@@ -908,24 +911,24 @@ MECE（Mutually Exclusive, Collectively Exhaustive）原则要求：
 [具体修改建议]
 `
 
-    aiAnalysisResult.value = ''
-    aiReasoningContent.value = ''
-    showReasoning.value = true
+    aiSoftOptionalResult.value = ''
+    aiSoftOptionalReasoning.value = ''
+    showSoftOptionalReasoning.value = true
     
     await callZhipuAIStream(
       prompt,
       (chunk) => {
-        aiAnalysisResult.value += chunk
+        aiSoftOptionalResult.value += chunk
       },
       (reasoningChunk) => {
-        aiReasoningContent.value += reasoningChunk
+        aiSoftOptionalReasoning.value += reasoningChunk
       }
     )
     
-    showReasoning.value = false
+    showSoftOptionalReasoning.value = false
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
-    showReasoning.value = false
+    showSoftOptionalReasoning.value = false
   } finally {
     aiAnalysisLoading.value = false
   }
@@ -1083,20 +1086,36 @@ async function fetchBitableRecord() {
             </button>
           </div>
 
-          <div v-if="aiReasoningContent" class="ai-reasoning" :class="{ hidden: !showReasoning }">
+          <div v-if="aiHardConstraintReasoning" class="ai-reasoning" :class="{ hidden: !showHardConstraintReasoning }">
             <div class="reasoning-header">
-              <h4>思考过程</h4>
-              <button class="collapse-btn" @click="showReasoning = false">收起</button>
+              <h4>硬约束分析 - 思考过程</h4>
+              <button class="collapse-btn" @click="showHardConstraintReasoning = false">收起</button>
             </div>
-            <pre>{{ aiReasoningContent }}</pre>
+            <pre>{{ aiHardConstraintReasoning }}</pre>
           </div>
 
-          <div v-if="aiAnalysisResult" class="ai-result">
-            <div v-if="aiReasoningContent && !showReasoning" class="show-reasoning-btn">
-              <button class="text-btn" @click="showReasoning = true">显示思考过程</button>
+          <div v-if="aiHardConstraintResult" class="ai-result">
+            <div v-if="aiHardConstraintReasoning && !showHardConstraintReasoning" class="show-reasoning-btn">
+              <button class="text-btn" @click="showHardConstraintReasoning = true">显示硬约束分析思考过程</button>
             </div>
-            <h4>分析结果</h4>
-            <pre>{{ aiAnalysisResult }}</pre>
+            <h4>硬约束分析结果</h4>
+            <pre>{{ aiHardConstraintResult }}</pre>
+          </div>
+
+          <div v-if="aiSoftOptionalReasoning" class="ai-reasoning" :class="{ hidden: !showSoftOptionalReasoning }">
+            <div class="reasoning-header">
+              <h4>软约束/可选约束分析 - 思考过程</h4>
+              <button class="collapse-btn" @click="showSoftOptionalReasoning = false">收起</button>
+            </div>
+            <pre>{{ aiSoftOptionalReasoning }}</pre>
+          </div>
+
+          <div v-if="aiSoftOptionalResult" class="ai-result">
+            <div v-if="aiSoftOptionalReasoning && !showSoftOptionalReasoning" class="show-reasoning-btn">
+              <button class="text-btn" @click="showSoftOptionalReasoning = true">显示软约束/可选约束分析思考过程</button>
+            </div>
+            <h4>软约束/可选约束分析结果</h4>
+            <pre>{{ aiSoftOptionalResult }}</pre>
           </div>
 
           <div v-if="aiAnalysisLoading" class="ai-loading">
