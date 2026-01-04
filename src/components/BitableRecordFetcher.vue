@@ -90,9 +90,9 @@ function getMimeTypeCategory(mimeType: string): string {
   if (!mimeType) return ''
   const lower = mimeType.toLowerCase()
   if (lower.includes('pdf')) return 'pdf'
-  if (lower.includes('word') || lower.includes('document') || lower.includes('docx')) return 'docx'
-  if (lower.includes('presentation') || lower.includes('powerpoint') || lower.includes('pptx')) return 'pptx'
-  if (lower.includes('spreadsheet') || lower.includes('excel') || lower.includes('xlsx')) return 'xlsx'
+  if (lower.includes('pptx') || lower.includes('presentation') || lower.includes('powerpoint')) return 'pptx'
+  if (lower.includes('docx') || lower.includes('word') || lower.includes('document')) return 'docx'
+  if (lower.includes('xlsx') || lower.includes('spreadsheet') || lower.includes('excel')) return 'xlsx'
   return ''
 }
 
