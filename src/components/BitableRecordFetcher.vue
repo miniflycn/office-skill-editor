@@ -18,6 +18,31 @@ const aiAnalysisResult = ref('')
 const aiReasoningContent = ref('')
 const showReasoning = ref(false)
 
+const fieldOrder = [
+  '会触发特定技能的用户 Query',
+  '调整后的 Rubrics',
+  '修改后的 PE'
+]
+
+const orderedFormFields = computed(() => {
+  const result: Record<string, string> = {}
+  const remaining: Record<string, string> = {}
+  
+  fieldOrder.forEach(key => {
+    if (formData.value[key]) {
+      result[key] = formData.value[key]
+    }
+  })
+  
+  Object.keys(formData.value).forEach(key => {
+    if (!fieldOrder.includes(key)) {
+      remaining[key] = formData.value[key]
+    }
+  })
+  
+  return { ...result, ...remaining }
+})
+
 function extractTextFromArray(arr: any[]): string {
   if (!Array.isArray(arr)) return String(arr || '')
   return arr.map(item => item.text || item || '').join('')
@@ -709,7 +734,7 @@ async function fetchBitableRecord() {
         <h2>查询结果</h2>
 
         <div class="form-container">
-          <div class="form-row" v-for="(value, key) in formData" :key="key">
+          <div class="form-row" v-for="(value, key) in orderedFormFields" :key="key">
             <div class="form-label">{{ key }}</div>
             <div class="form-value">
               <pre v-if="isComplexContent(value)">{{ value }}</pre>
