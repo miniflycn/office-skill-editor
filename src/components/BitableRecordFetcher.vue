@@ -140,6 +140,96 @@ function countLines(text: string): number {
   return text.split('\n').filter(line => line.trim()).length
 }
 
+function isAIGeneratedText(text: string): { isAI: boolean; confidence: number; reasons: string[] } {
+  const reasons: string[] = []
+  let score = 0
+  const maxScore = 10
+  
+  if (!text || text.trim().length < 10) {
+    return { isAI: false, confidence: 0, reasons: ['文本过短，无法判断'] }
+  }
+
+  const patterns = {
+    aiPhrases: [
+      '以下(是|为)', '请注意', '需要确保', '必须满足',
+      '全面覆盖', '详细说明', '具体而言', '总的来说',
+      '包括但不限于', '具体包括', '具体要求如下',
+      '确保(.*)符合', '符合(.*)要求', '覆盖所有',
+      '涵盖(.*)方面', '包含以下', '满足以下'
+    ],
+    formalPatterns: [
+      '请您', '请务必', '务必确保', '必须保证',
+      '所有的', '全部的', '完整的', '充分的',
+      '准确的', '精确的', '正确的', '合理的'
+    ],
+    structuralIndicators: [
+      /^[①②③④⑤]/m,
+      /^[0-9]+\./m,
+      /^[-•]\s/m,
+      /^\d+\.\d+/m,
+      /^[一二三四五六七八九十]/m
+    ]
+  }
+
+  patterns.aiPhrases.forEach(pattern => {
+    const regex = new RegExp(pattern)
+    if (regex.test(text)) {
+      score += 1.5
+      reasons.push(`包含AI常见短语模式: "${pattern}"`)
+    }
+  })
+
+  patterns.formalPatterns.forEach(phrase => {
+    if (text.includes(phrase)) {
+      score += 0.5
+      reasons.push(`包含过于正式的表达: "${phrase}"`)
+    }
+  })
+
+  patterns.structuralIndicators.forEach(regex => {
+    if (regex.test(text)) {
+      score += 1
+      reasons.push('使用规范的结构化编号格式')
+    }
+  })
+
+  const sentences = text.split(/[。！？\n]/).filter(s => s.trim().length > 0)
+  if (sentences.length > 0) {
+    const avgLength = sentences.reduce((sum, s) => sum + s.length, 0) / sentences.length
+    if (avgLength > 30) {
+      score += 1
+      reasons.push(`句子平均长度较长 (${avgLength.toFixed(1)}字)，AI倾向使用长句`)
+    }
+  }
+
+  const lineBreaks = text.split('\n')
+  if (lineBreaks.length > 1) {
+    const allLinesSimilarLength = lineBreaks.every(line => {
+      const trimmed = line.trim()
+      return trimmed.length > 10 && trimmed.length < 100
+    })
+    if (allLinesSimilarLength) {
+      score += 1
+      reasons.push('各行长度过于均匀，可能是批量生成')
+    }
+  }
+
+  const hasUserQueryIndicators = [
+    '用户', '客户', '请求', '需要', '想要', '希望',
+    '查询', '问题', '需求', '场景'
+  ]
+  const userIndicatorCount = hasUserQueryIndicators.filter(ind => text.includes(ind)).length
+  if (userIndicatorCount < 2) {
+    score += 1.5
+    reasons.push('缺少真实用户Query的自然语言特征')
+  }
+
+  const aiConfidence = Math.min((score / maxScore) * 100, 100)
+  const isAI = score >= 5
+
+  return { isAI, confidence: aiConfidence, reasons }
+}
+
 function parseRubrics(rubricsText: string): any {
   try {
     return JSON.parse(rubricsText)
@@ -150,6 +240,17 @@ function parseRubrics(rubricsText: string): any {
 
 function validateRubrics() {
   const results: Array<{ name: string; passed: boolean; message: string }> = []
+  const userQueryText = formData.value['会触发特定技能的用户 Query']
+  
+  const aiDetection = isAIGeneratedText(userQueryText)
+  results.push({
+    name: '检验0：用户 Query AI 检测',
+    passed: !aiDetection.isAI,
+    message: aiDetection.isAI 
+      ? `可能是AI生成的 (置信度: ${aiDetection.confidence.toFixed(0)}%) ${aiDetection.reasons.map(r => '\n- ' + r).join('')} ✗`
+      : `未检测到AI生成特征 ✓`
+  })
+
   const originalRubrics = formData.value['AI 生成的原始 Rubrics']
   const adjustedRubrics = formData.value['调整后的 Rubrics']
 
