@@ -33,8 +33,107 @@ function parseFormData(rawData: any) {
       : String(fields['使用的特定技能'] || ''),
     '修改后的 PE': extractTextFromArray(fields['修改后的 PE']),
     '调整后的 Rubrics': extractTextFromArray(fields['调整后的 Rubrics']),
-    '领域标签': extractTextFromArray(fields['领域标签'])
+    '领域标签': extractTextFromArray(fields['领域标签']),
+    'Query 里提到的附件': parseAttachmentField(fields['Query 里提到的附件'])
   }
+}
+
+function parseAttachmentField(attachment: any): string {
+  if (!attachment) return ''
+  if (Array.isArray(attachment)) {
+    return attachment.map((file: any) => {
+      const name = file.name || ''
+      const type = file.type || ''
+      return `${name}|${type}`
+    }).join('\n')
+  }
+  if (typeof attachment === 'object') {
+    const name = attachment.name || ''
+    const type = attachment.type || ''
+    return `${name}|${type}`
+  }
+  return String(attachment)
+}
+
+function getMimeTypeCategory(mimeType: string): string {
+  if (!mimeType) return ''
+  const lower = mimeType.toLowerCase()
+  if (lower.includes('pdf')) return 'pdf'
+  if (lower.includes('word') || lower.includes('document') || lower.includes('docx')) return 'docx'
+  if (lower.includes('presentation') || lower.includes('powerpoint') || lower.includes('pptx')) return 'pptx'
+  if (lower.includes('spreadsheet') || lower.includes('excel') || lower.includes('xlsx')) return 'xlsx'
+  return ''
+}
+
+function validateSkillsAndAttachments() {
+  const results: Array<{ name: string; passed: boolean; message: string }> = []
+  const usedSkills = formData.value['使用的特定技能'].toLowerCase()
+  const attachmentsText = formData.value['Query 里提到的附件']
+  const modifiedPE = formData.value['修改后的 PE']
+
+  const attachmentTypes: string[] = []
+  if (attachmentsText) {
+    const lines = attachmentsText.split('\n').filter(l => l.trim())
+    lines.forEach(line => {
+      const parts = line.split('|')
+      const mimeType = parts[1]?.trim() || ''
+      if (mimeType) {
+        attachmentTypes.push(getMimeTypeCategory(mimeType))
+      }
+    })
+  }
+
+  const requiredSkills = attachmentTypes.filter(t => t)
+  const usedSkillList = ['docx', 'pdf', 'pptx', 'xlsx'].filter(skill =>
+    usedSkills.includes(skill) || usedSkills.includes(skill.toUpperCase())
+  )
+
+  let attachmentCheckPassed = true
+  const attachmentIssues: string[] = []
+
+  requiredSkills.forEach(skill => {
+    const skillMatch = usedSkillList.some(s => s === skill)
+    if (!skillMatch) {
+      attachmentCheckPassed = false
+      attachmentIssues.push(`需要 ${skill.toUpperCase()} 技能但未包含`)
+    }
+  })
+
+  results.push({
+    name: '检验7：附件类型与特定技能匹配',
+    passed: attachmentCheckPassed,
+    message: attachmentCheckPassed
+      ? `附件类型与技能匹配正确 ${usedSkillList.length > 0 ? '(使用: ' + usedSkillList.join(', ').toUpperCase() + ')' : '✓'}`
+      : `${attachmentIssues.join('；')} ✗`
+  })
+
+  const skillLinks: Record<string, string> = {
+    'docx': 'https://github.com/anthropics/skills/blob/main/skills/docx/SKILL.md',
+    'pdf': 'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+    'pptx': 'https://github.com/anthropics/skills/blob/main/skills/pptx/SKILL.md',
+    'xlsx': 'https://github.com/anthropics/skills/blob/main/skills/xlsx/SKILL.md'
+  }
+
+  let skillLinksPassed = true
+  const skillLinksIssues: string[] = []
+
+  usedSkillList.forEach(skill => {
+    const link = skillLinks[skill]
+    if (link && !modifiedPE.includes(link)) {
+      skillLinksPassed = false
+      skillLinksIssues.push(`${skill.toUpperCase()} 缺少 Skill 链接`)
+    }
+  })
+
+  results.push({
+    name: '检验8：特定技能链接在 PE 中',
+    passed: skillLinksPassed,
+    message: skillLinksPassed
+      ? `所有使用的技能都包含 Skill 链接 ${usedSkillList.length > 0 ? '(' + usedSkillList.join(', ').toUpperCase() + ')' : '✓'}`
+      : `${skillLinksIssues.join('；')} ✗`
+  })
+
+  return results
 }
 
 function countLines(text: string): number {
@@ -233,6 +332,9 @@ function validateRubrics() {
       message: '无约束或无法解析 ✓'
     })
   }
+
+  const skillResults = validateSkillsAndAttachments()
+  results.push(...skillResults)
 
   validationResults.value = results
 }
