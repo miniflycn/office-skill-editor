@@ -307,7 +307,7 @@ function validateRubrics() {
     name: '检验0：用户 Query AI 检测',
     passed: !aiDetection.isAI,
     message: aiDetection.isAI 
-      ? `可能是AI生成的 (置信度: ${aiDetection.confidence.toFixed(0)}%) ${aiDetection.reasons.map(r => '\n- ' + r).join('')} ✗`
+      ? `可能是AI生成的 (置信度: ${aiDetection.confidence.toFixed(0)}%)\n检测到以下特征：\n${aiDetection.reasons.map(r => '  • ' + r).join('\n')}`
       : `未检测到AI生成特征 ✓`
   })
 
@@ -1319,6 +1319,7 @@ button:disabled {
   color: #666;
   padding-left: 24px;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .no-data {
