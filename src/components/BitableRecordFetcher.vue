@@ -528,6 +528,68 @@ function extractHardConstraintOptions(rubricsText: string): Array<{ description:
   }))
 }
 
+function extractSoftConstraintOptions(rubricsText: string): Array<{ description: string; isFourPoint: string; options: Array<{ score: string; description: string }> }> {
+  const parsed = parseRubrics(rubricsText)
+  if (!parsed || !parsed.rubric || !parsed.rubric.软约束) {
+    return []
+  }
+
+  return parsed.rubric.软约束.map((sc: any) => {
+    const description = sc['rubric描述'] || ''
+    const isFourPoint = sc['是否需要4分区间'] || ''
+    const options: Array<{ score: string; description: string }> = []
+
+    Object.keys(sc).forEach(key => {
+      const match = key.match(/^(\d+)分情况$/)
+      if (match) {
+        options.push({
+          score: match[1],
+          description: sc[key] || ''
+        })
+      }
+    })
+
+    options.sort((a, b) => parseInt(a.score) - parseInt(b.score))
+
+    return {
+      description,
+      isFourPoint,
+      options
+    }
+  })
+}
+
+function extractOptionalConstraintOptions(rubricsText: string): Array<{ description: string; isFourPoint: string; options: Array<{ score: string; description: string }> }> {
+  const parsed = parseRubrics(rubricsText)
+  if (!parsed || !parsed.rubric || !parsed.rubric.可选约束) {
+    return []
+  }
+
+  return parsed.rubric.可选约束.map((oc: any) => {
+    const description = oc['rubric描述'] || ''
+    const isFourPoint = oc['是否需要4分区间'] || ''
+    const options: Array<{ score: string; description: string }> = []
+
+    Object.keys(oc).forEach(key => {
+      const match = key.match(/^(\d+)分情况$/)
+      if (match) {
+        options.push({
+          score: match[1],
+          description: oc[key] || ''
+        })
+      }
+    })
+
+    options.sort((a, b) => parseInt(a.score) - parseInt(b.score))
+
+    return {
+      description,
+      isFourPoint,
+      options
+    }
+  })
+}
+
 async function callZhipuAIStream(
   prompt: string,
   onChunk: (chunk: string) => void,
@@ -714,6 +776,161 @@ ${constraintsText}
   }
 }
 
+async function analyzeSoftAndOptionalConstraints() {
+  const adjustedRubrics = formData.value['调整后的 Rubrics']
+  if (!adjustedRubrics) {
+    error.value = '无可分析的 Rubrics 数据'
+    return
+  }
+
+  const softConstraints = extractSoftConstraintOptions(adjustedRubrics)
+  const optionalConstraints = extractOptionalConstraintOptions(adjustedRubrics)
+
+  if (softConstraints.length === 0 && optionalConstraints.length === 0) {
+    error.value = '无法提取软约束或可选约束'
+    return
+  }
+
+  const userQueries = formData.value['会触发特定技能的用户 Query']
+  const userQueriesText = Array.isArray(userQueries)
+    ? userQueries.join('\n- ')
+    : userQueries || '无'
+
+  aiAnalysisLoading.value = true
+  error.value = ''
+  aiAnalysisResult.value = ''
+  aiReasoningContent.value = ''
+
+  try {
+    const softConstraintsText = softConstraints.map((sc, idx) => {
+      const optionsText = sc.options.map((opt: any) => {
+        return `${opt.score}分: ${opt.description}`
+      }).join('\n')
+      return `【软约束 ${idx + 1}】
+描述: ${sc.description}
+是否需要4分区间: ${sc.isFourPoint}
+评分选项:
+${optionsText}`
+    }).join('\n\n')
+
+    const optionalConstraintsText = optionalConstraints.map((oc, idx) => {
+      const optionsText = oc.options.map((opt: any) => {
+        return `${opt.score}分: ${opt.description}`
+      }).join('\n')
+      return `【可选约束 ${idx + 1}】
+描述: ${oc.description}
+是否需要4分区间: ${oc.isFourPoint}
+评分选项:
+${optionsText}`
+    }).join('\n\n')
+
+    const prompt = `## 背景信息
+
+【会触发特定技能的用户 Query】：
+${userQueriesText ? '- ' + userQueriesText : '无'}
+
+【软约束列表】（用于对非关键要求进行评分）：
+${softConstraintsText || '无软约束'}
+
+【可选约束列表】（用于对可选的附加要求进行评分）：
+${optionalConstraintsText || '无可选约束'}
+
+## 分析任务
+
+请对软约束和可选约束进行以下两项检查：
+
+### 检查1：MECE 原则验证
+
+MECE（Mutually Exclusive, Collectively Exhaustive）原则要求：
+1. 互斥性：各评分选项之间不能有重叠，一个案例只能被判为某一个分数
+2. 完备性：所有可能的场景都应该被覆盖，不存在无法判分的情况
+
+请检查每个约束的评分选项：
+- 评分选项之间是否互斥？是否存在某些场景可能同时满足多个选项？
+- 评分选项是否完备？是否存在某些场景无法被判为任何分数？
+- 对于使用 0-4 分评分的情况，相邻分数之间的界限是否清晰？
+
+请对每个约束给出：
+- MECE 符合程度（完全符合/部分符合/不符合）
+- 具体的重叠或遗漏问题
+- 改进建议
+
+### 检查2：主观评判问题验证
+
+0-4 分评分虽然是主观题，但不能直接考察评分员的主观感受（如美观度、舒适度、好看等），否则会导致评分差异巨大。
+
+请检查每个评分描述是否包含以下问题：
+
+1. **主观感受类词汇**：描述中是否包含以下词汇或类似表达：
+   - 好看、漂亮、丑陋、精致、粗糙
+   - 舒服、舒适、别扭、难受
+   - 美观、大气、廉价、土气
+   - 清晰、模糊（除非有客观标准）
+   - 合理、不合理（除非有客观定义）
+   - 专业、业余、外行
+
+2. **缺少客观标准**：描述是否只给出主观感受而没有可验证的客观标准
+   - 例如："课件风格舒服" - 没有说明什么是"舒服"的标准
+   - 例如："内容排版美观" - 没有说明"美观"的具体要求
+
+3. **依赖个人判断**：评分是否依赖评分员的个人品味、审美或主观判断
+   - 不同人可能有完全不同的判断标准
+
+请对每个包含问题的约束指出：
+- 具体的问题描述
+- 为什么这会导致评分差异
+- 改进建议（用可验证的客观标准替代主观描述）
+
+## 输出格式
+
+### MECE 原则检查结果
+
+#### 软约束分析
+[对每个软约束的 MECE 检查]
+
+#### 可选约束分析
+[对每个可选约束的 MECE 检查]
+
+### 主观评判问题检查结果
+
+#### 软约束分析
+[对每个软约束的主观评判检查]
+
+#### 可选约束分析
+[对每个可选约束的主观评判检查]
+
+### 改进建议
+
+#### 必须修改的约束
+[列出必须修改的约束及原因]
+
+#### 改进建议
+[具体修改建议]
+`
+
+    aiAnalysisResult.value = ''
+    aiReasoningContent.value = ''
+    showReasoning.value = true
+    
+    await callZhipuAIStream(
+      prompt,
+      (chunk) => {
+        aiAnalysisResult.value += chunk
+      },
+      (reasoningChunk) => {
+        aiReasoningContent.value += reasoningChunk
+      }
+    )
+    
+    showReasoning.value = false
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+    showReasoning.value = false
+  } finally {
+    aiAnalysisLoading.value = false
+  }
+}
+
 async function fetchBitableRecord() {
   if (!recordId.value.trim()) {
     error.value = '请输入 recordId'
@@ -857,9 +1074,14 @@ async function fetchBitableRecord() {
 
         <div class="ai-analysis-section">
           <h3>AI 深度分析</h3>
-          <button @click="analyzeHardConstraints" :disabled="aiAnalysisLoading" class="analyze-btn">
-            {{ aiAnalysisLoading ? '分析中...' : '调用 AI 分析硬约束' }}
-          </button>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+            <button @click="analyzeHardConstraints" :disabled="aiAnalysisLoading" class="analyze-btn">
+              {{ aiAnalysisLoading ? '分析中...' : '调用 AI 分析硬约束' }}
+            </button>
+            <button @click="analyzeSoftAndOptionalConstraints" :disabled="aiAnalysisLoading" class="analyze-btn" style="background-color: #9b59b6;">
+              {{ aiAnalysisLoading ? '分析中...' : '调用 AI 分析软约束和可选约束' }}
+            </button>
+          </div>
 
           <div v-if="aiReasoningContent" class="ai-reasoning" :class="{ hidden: !showReasoning }">
             <div class="reasoning-header">
