@@ -94,8 +94,8 @@ function getMimeTypeCategory(mimeType: string): string {
   const lower = mimeType.toLowerCase()
   if (lower.includes('pdf') || lower === 'application/pdf') return 'pdf'
   if (lower.includes('pptx') || lower.includes('presentation') || lower.includes('powerpoint') || lower === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return 'pptx'
-  if (lower.includes('docx') || lower.includes('word') || lower.includes('document') || lower === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx'
   if (lower.includes('xlsx') || lower.includes('spreadsheet') || lower.includes('excel') || lower === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'xlsx'
+  if (lower.includes('docx') || lower.includes('word') || lower.includes('document') || lower === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx'
   return ''
 }
 
