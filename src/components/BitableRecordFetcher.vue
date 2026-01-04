@@ -312,22 +312,31 @@ function validateRubrics() {
   const adjustedRubrics = formData.value['调整后的 Rubrics']
 
   const diff = Diff.diffLines(originalRubrics, adjustedRubrics)
-  let diffLines = 0
+  
+  let addedLines = 0
+  let removedLines = 0
   diff.forEach(part => {
-    if (part.added || part.removed) {
-      const lines = part.value.split('\n').filter(line => line.trim())
-      diffLines += lines.length
+    const lines = part.value.split('\n').filter(line => line.trim())
+    if (part.added) {
+      addedLines += lines.length
+    } else if (part.removed) {
+      removedLines += lines.length
     }
   })
 
   const originalLineCount = countLines(originalRubrics)
-  const diffPercentage = originalLineCount > 0 ? ((diffLines / originalLineCount) * 100).toFixed(2) : '0'
-  const passed = parseFloat(diffPercentage) < 10
+  const adjustedLineCount = countLines(adjustedRubrics)
+  
+  const addedPercentage = originalLineCount > 0 ? ((addedLines / originalLineCount) * 100).toFixed(2) : '0'
+  const removedPercentage = originalLineCount > 0 ? ((removedLines / originalLineCount) * 100).toFixed(2) : '0'
+  const totalDiffPercentage = parseFloat(addedPercentage) + parseFloat(removedPercentage)
+  
+  const passed = totalDiffPercentage > 10
 
   results.push({
     name: '检验1：行数对比',
     passed: passed,
-    message: `AI 生成的原始 Rubrics: ${originalLineCount} 行，差异行数: ${diffLines} 行，差异占比: ${diffPercentage}% ${passed ? '✓' : '✗ (差异应小于10%)'}`
+    message: `AI 生成的原始 Rubrics: ${originalLineCount} 行，调整后: ${adjustedLineCount} 行，新增: ${addedLines} 行，删除: ${removedLines} 行，差异占比: ${totalDiffPercentage.toFixed(2)}% ${passed ? '✓ (差异大于10%)' : '✗ (差异应大于10%)'}`
   })
 
   const parsedAdjusted = parseRubrics(adjustedRubrics)
