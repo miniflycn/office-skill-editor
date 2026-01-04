@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import * as Diff from 'diff'
 
 const API_KEY = 'f97c08043d7e46a4895b77ec7d93e425.iL7AVQhJq7GwVRgi'
 const API_BASE = 'https://sd46rr9g19ma6giekl1c0.apigateway-cn-beijing.volceapi.com'
@@ -17,6 +18,11 @@ const aiAnalysisLoading = ref(false)
 const aiAnalysisResult = ref('')
 const aiReasoningContent = ref('')
 const showReasoning = ref(false)
+const showDiffModal = ref(false)
+const diffResult = ref<Array<Diff.Change>>([])
+const diffOriginalLines = ref(0)
+const diffAdjustedLines = ref(0)
+const diffChangeCount = ref(0)
 
 const fieldOrder = [
   '会触发特定技能的用户 Query',
@@ -165,6 +171,32 @@ function countLines(text: string): number {
   return text.split('\n').filter(line => line.trim()).length
 }
 
+function computeDiff(original: string, adjusted: string) {
+  const originalLines = original.split('\n').filter(line => line.trim())
+  const adjustedLines = adjusted.split('\n').filter(line => line.trim())
+  
+  diffOriginalLines.value = originalLines.length
+  diffAdjustedLines.value = adjustedLines.length
+  
+  const diff = Diff.diffLines(original, adjusted)
+  diffResult.value = diff
+  
+  const changeCount = diff.filter(part => !part.added && !part.removed).length
+  const totalParts = diff.length
+  diffChangeCount.value = totalParts > 0 ? Math.round(((totalParts - changeCount) / totalParts) * 100) : 0
+}
+
+function openDiffModal() {
+  const originalRubrics = formData.value['AI 生成的原始 Rubrics']
+  const adjustedRubrics = formData.value['调整后的 Rubrics']
+  computeDiff(originalRubrics, adjustedRubrics)
+  showDiffModal.value = true
+}
+
+function closeDiffModal() {
+  showDiffModal.value = false
+}
+
 function isAIGeneratedText(text: string): { isAI: boolean; confidence: number; reasons: string[] } {
   const reasons: string[] = []
   let score = 0
@@ -279,14 +311,23 @@ function validateRubrics() {
   const originalRubrics = formData.value['AI 生成的原始 Rubrics']
   const adjustedRubrics = formData.value['调整后的 Rubrics']
 
-  const originalLines = countLines(originalRubrics)
-  const adjustedLines = countLines(adjustedRubrics)
-  const percentage = originalLines > 0 ? ((adjustedLines / originalLines) * 100).toFixed(2) : '0'
+  const diff = Diff.diffLines(originalRubrics, adjustedRubrics)
+  let diffLines = 0
+  diff.forEach(part => {
+    if (part.added || part.removed) {
+      const lines = part.value.split('\n').filter(line => line.trim())
+      diffLines += lines.length
+    }
+  })
+
+  const originalLineCount = countLines(originalRubrics)
+  const diffPercentage = originalLineCount > 0 ? ((diffLines / originalLineCount) * 100).toFixed(2) : '0'
+  const passed = parseFloat(diffPercentage) < 10
 
   results.push({
     name: '检验1：行数对比',
-    passed: true,
-    message: `AI 生成的原始 Rubrics: ${originalLines} 行，调整后的 Rubrics: ${adjustedLines} 行，占比 ${percentage}%`
+    passed: passed,
+    message: `AI 生成的原始 Rubrics: ${originalLineCount} 行，差异行数: ${diffLines} 行，差异占比: ${diffPercentage}% ${passed ? '✓' : '✗ (差异应小于10%)'}`
   })
 
   const parsedAdjusted = parseRubrics(adjustedRubrics)
@@ -757,12 +798,51 @@ async function fetchBitableRecord() {
             <div class="validation-header">
               <span class="status-icon">{{ result.passed ? '✓' : '✗' }}</span>
               <span class="validation-name">{{ result.name }}</span>
+              <button 
+                v-if="result.name === '检验1：行数对比'" 
+                class="diff-btn" 
+                @click="openDiffModal"
+              >
+                查看差异
+              </button>
             </div>
             <div class="validation-message">{{ result.message }}</div>
           </div>
 
           <div v-if="validationResults.length === 0" class="no-data">
             暂无检验数据
+          </div>
+        </div>
+
+        <div v-if="showDiffModal" class="diff-modal-overlay" @click="closeDiffModal">
+          <div class="diff-modal" @click.stop>
+            <div class="diff-modal-header">
+              <h3>差异对比</h3>
+              <button class="close-btn" @click="closeDiffModal">×</button>
+            </div>
+            <div class="diff-modal-content">
+              <div class="diff-stats">
+                <span>原始: {{ diffOriginalLines }} 行</span>
+                <span>调整后: {{ diffAdjustedLines }} 行</span>
+              </div>
+              <div class="diff-container">
+                <div 
+                  v-for="(part, index) in diffResult" 
+                  :key="index" 
+                  class="diff-line"
+                  :class="{ 
+                    'diff-added': part.added, 
+                    'diff-removed': part.removed,
+                    'diff-unchanged': !part.added && !part.removed
+                  }"
+                >
+                  <span class="diff-prefix">
+                    {{ part.added ? '+' : part.removed ? '-' : ' ' }}
+                  </span>
+                  <pre class="diff-content">{{ part.value }}</pre>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1132,6 +1212,150 @@ button:disabled {
   background-color: #f5f7fa;
   border-radius: 8px;
   font-size: 14px;
+}
+
+.diff-btn {
+  margin-left: auto;
+  padding: 4px 12px;
+  font-size: 12px;
+  background-color: #4a9eff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.diff-btn:hover {
+  background-color: #3a8eef;
+}
+
+.diff-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.diff-modal {
+  background-color: white;
+  border-radius: 8px;
+  width: 80%;
+  max-width: 900px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.diff-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.diff-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 24px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.close-btn:hover {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.diff-modal-content {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.diff-stats {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  display: flex;
+  gap: 24px;
+  font-size: 14px;
+  color: #666;
+}
+
+.diff-container {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.diff-line {
+  display: flex;
+  min-height: 24px;
+}
+
+.diff-line:hover {
+  background-color: #f8f9fa;
+}
+
+.diff-added {
+  background-color: #e6ffed;
+}
+
+.diff-removed {
+  background-color: #ffebe9;
+}
+
+.diff-unchanged {
+  background-color: #ffffff;
+}
+
+.diff-prefix {
+  width: 24px;
+  flex-shrink: 0;
+  text-align: center;
+  color: #666;
+  user-select: none;
+  padding-top: 2px;
+}
+
+.diff-content {
+  margin: 0;
+  padding: 2px 8px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.diff-added .diff-content {
+  color: #22863a;
+}
+
+.diff-removed .diff-content {
+  color: #cb2431;
 }
 
 @media (max-width: 1000px) {
