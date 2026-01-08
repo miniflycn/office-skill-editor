@@ -25,7 +25,61 @@ const editorOptions = {
   minimap: { enabled: false },
   fontSize: 14,
   lineNumbers: 'on',
-  scrollBeyondLastLine: false
+  scrollBeyondLastLine: false,
+  // Monaco JSON语言服务配置
+  // JSON验证配置
+  json: {
+    // 允许JSON模式验证
+    enableSchemaRequest: true,
+    // 验证级别
+    validate: {
+      allowComments: false,
+      schemaValidation: 'warning'
+    },
+    // JSON模式配置
+    schemas: [
+      {
+        // 用于所有JSON文件
+        uri: 'http://json-schema.org/draft-07/schema',
+        fileMatch: ['*'],
+        schema: {
+          type: 'object',
+          properties: {
+            rubric: {
+              type: 'object',
+              properties: {
+                硬约束: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      rubric描述: { type: 'string' },
+                      是否需要相关事实: { type: 'string' },
+                      相关事实: { type: 'string' },
+                      事实数据源: { type: 'string' }
+                    },
+                    required: ['rubric描述']
+                  }
+                },
+                软约束: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      rubric描述: { type: 'string' },
+                      是否需要4分区间: { type: 'string' }
+                    },
+                    required: ['rubric描述']
+                  }
+                }
+              },
+              required: ['硬约束', '软约束']
+            }
+          }
+        }
+      }
+    ]
+  }
 }
 
 // 技能选项
@@ -649,7 +703,6 @@ function extractHardConstraintOptions(rubrics: any): any[] {
         if (key.includes('硬约束') || key.toLowerCase().includes('hard')) {
           const value = rubrics[key]
           if (Array.isArray(value)) return value
-          if (value?.硬约束) return value.硬约束
           if (value?.hardConstraints) return value.hardConstraints
         }
       }
@@ -716,7 +769,7 @@ async function callAIAnalysis() {
     rubricsObj = JSON.parse(adjustedRubrics.value)
     console.log('parsed rubricsObj:', rubricsObj)
     console.log('rubric field:', rubricsObj?.rubric)
-    console.log('硬约束:', rubricsObj?.rubric?.硬约束)
+    console.log('硬约束:', rubricsObj?.rubric?.hardConstraints)
   } catch (e) {
     alert('调整后的Rubrics JSON格式无效')
     return
@@ -771,7 +824,7 @@ ${hardConstraintsText || '无硬约束'}
 ## 2. 是否可仅从Query + 相关事实判断
 检查描述是否：
 - 描述具体明确，没有歧义
-- 判断标准清晰，仅从Query + 相关事实就可以判断
+- 判断标准清晰，仅从Query + 相关 fact + 相关 fact就可以判断
 - 是否不依赖人的主观感受，只依赖客观事实
 
 ## 3. 可从最终产物验证
@@ -782,7 +835,7 @@ ${hardConstraintsText || '无硬约束'}
 
 请对每个约束分别给出：
 - 是否符合 MECE 原则（符合/不符合）
-- 是否可仅从Query + 相关事实判断（符合/不符合）
+- 是否可仅从Query + 相关 fact + 相关 fact判断（符合/不符合）
 - 是否可从最终产物验证（符合/不符合）
 - 具体问题和改进建议
 
