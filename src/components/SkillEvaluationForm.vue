@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import * as Diff from 'diff'
+import { marked } from 'marked'
 
 // API配置
 const API_KEY = '06c43b48b854470f88b6a9fa2cdd8bac.BkQtKioz4rCB7ago'
@@ -56,6 +57,20 @@ const diffChangeCount = ref(0)
 const diffResults = computed(() => {
   return diffOriginalLines.value > 0 || diffAdjustedLines.value > 0
 })
+
+// 渲染Markdown内容
+function renderMarkdown(text: string): string {
+  if (!text) return ''
+  try {
+    return marked.parse(text, { async: false }) as string
+  } catch {
+    return text
+  }
+}
+
+// 渲染AI分析结果（Markdown格式）
+const renderedAIResult = computed(() => renderMarkdown(aiHardConstraintResult.value))
+const renderedAIReasoning = computed(() => renderMarkdown(aiHardConstraintReasoning.value))
 
 // 获取MimeType类别
 function getMimeTypeCategory(mimeType: string): string {
@@ -974,17 +989,16 @@ performStaticChecks()
               <template v-else>
                 <div class="ai-result-header">
                   <span class="result-label">🎯 分析结论</span>
-                  <pre 
-                    class="result-value"
+                  <div 
+                    class="result-value markdown-body"
                     :class="{ passed: aiHardConstraintResult === '通过', failed: aiHardConstraintResult === '未通过' }"
-                  >
-                    {{ aiHardConstraintResult }}
-                  </pre>
+                    v-html="renderedAIResult"
+                  ></div>
                 </div>
                 <div class="ai-reasoning">
                   <details>
                     <summary>查看详细分析</summary>
-                    <pre>{{ aiHardConstraintReasoning }}</pre>
+                    <div class="markdown-body" v-html="renderedAIReasoning"></div>
                   </details>
                   <!-- 全屏展开按钮 -->
                   <button 
@@ -1069,12 +1083,12 @@ performStaticChecks()
           </div>
           <div class="ai-fullscreen-body">
             <div class="ai-fullscreen-result">
-              <div class="result-value" :class="{ passed: aiHardConstraintResult === '通过', failed: aiHardConstraintResult === '未通过' }">
-                <pre>{{ aiHardConstraintResult }}</pre>
+              <div class="result-value markdown-body" :class="{ passed: aiHardConstraintResult === '通过', failed: aiHardConstraintResult === '未通过' }">
+                <div v-html="renderedAIResult"></div>
               </div>
             </div>
             <div class="ai-fullscreen-content">
-              <pre>{{ aiHardConstraintReasoning }}</pre>
+              <div class="markdown-body" v-html="renderedAIReasoning"></div>
             </div>
           </div>
         </div>
@@ -1643,6 +1657,279 @@ performStaticChecks()
   }
 }
 
+.ai-fullscreen-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 0.95em;
+  line-height: 1.8;
+  color: #495057;
+}
+
+.ai-fullscreen-content {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #dee2e6;
+}
+
+.ai-fullscreen-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 0.95em;
+  line-height: 1.8;
+  color: #495057;
+}
+
+/* Markdown 渲染样式 */
+.markdown-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.8;
+  color: #24292e;
+  font-size: 0.95em;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: 0.3em;
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: 0.3em;
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
+.markdown-body p {
+  margin-top: 0;
+  margin-bottom: 16px;
+  line-height: 1.8;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2em;
+  margin-bottom: 16px;
+}
+
+.markdown-body li {
+  margin-bottom: 8px;
+}
+
+.markdown-body li + li {
+  margin-top: 4px;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+  color: #24292e;
+}
+
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(27, 31, 35, 0.05);
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+}
+
+.markdown-body pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #f6f8fa;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background-color: transparent;
+  font-size: 100%;
+}
+
+.markdown-body blockquote {
+  padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5;
+  margin: 0 0 16px 0;
+}
+
+.markdown-body blockquote p {
+  margin: 0;
+}
+
+.markdown-body table {
+  display: block;
+  width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  padding: 6px 13px;
+  border: 1px solid #dfe2e5;
+}
+
+.markdown-body table th {
+  font-weight: 600;
+  background-color: #f6f8fa;
+}
+
+.markdown-body table tr {
+  background-color: #fff;
+  border-top: 1px solid #c6cbd1;
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background-color: #f8f9fa;
+}
+
+.markdown-body hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: #e1e4e8;
+  border: 0;
+}
+
+.markdown-body a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+/* AI结果区域的特殊样式 */
+.ai-result .markdown-body {
+  background: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #e1e4e8;
+}
+
+.ai-result .result-label {
+  display: block;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.ai-result .result-value {
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 1.1em;
+}
+
+.ai-result .result-value.passed {
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  color: #155724;
+  border: 1px solid #b1dfbb;
+}
+
+.ai-result .result-value.failed {
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.ai-result .result-value h1,
+.ai-result .result-value h2 {
+  border: none;
+  margin-top: 0;
+}
+
+/* 全屏模态框中的markdown样式 */
+.ai-fullscreen-modal .markdown-body {
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.ai-fullscreen-modal .markdown-body h1:first-child {
+  margin-top: 0;
+}
+
+/* 表格样式优化 */
+.markdown-body table {
+  width: 100%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  text-align: left;
+  padding: 12px 16px;
+}
+
+/* 列表样式优化 */
+.markdown-body ul,
+.markdown-body ol {
+  margin-bottom: 20px;
+}
+
+/* 代码块样式优化 */
+.markdown-body pre {
+  background: #2d3748;
+  color: #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-body pre code {
+  color: inherit;
+}
+
+/* 引言块样式 */
+.markdown-body blockquote {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+  padding: 12px 20px;
+  border-radius: 0 8px 8px 0;
+}
+
+.markdown-body blockquote.warning {
+  background: #fef2f2;
+  border-left-color: #ef4444;
+}
+
+.markdown-body blockquote.info {
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+}
+
+.markdown-body blockquote.info {
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+}
+
 /* AI分析结果全屏模态框样式 */
 .ai-fullscreen-overlay {
   position: fixed;
@@ -1734,7 +2021,6 @@ performStaticChecks()
 }
 
 .ai-fullscreen-result {
-  text-align: center;
   margin-bottom: 24px;
 }
 
@@ -1752,6 +2038,12 @@ performStaticChecks()
   border-radius: 12px;
   padding: 24px;
   border: 1px solid #dee2e6;
+}
+
+.ai-fullscreen-content .markdown-body {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
 }
 
 .ai-fullscreen-content pre {
